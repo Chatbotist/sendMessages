@@ -12,13 +12,25 @@ app.use(bodyParser.json());
 // Отдаем статические файлы из папки public
 app.use(express.static(path.join(__dirname, 'public')));
 
+const BATCH_SIZE = 10; // Размер пакета для отправки сообщений
+const DELAY_BETWEEN_BATCHES = 2000; // Задержка между пакетами
+
 // Функция для отправки сообщения с временной задержкой
-const sendMessageWithDelay = async (chat_id, bot_token, data, delay) => {
-    // Задержка
-    await new Promise(resolve => setTimeout(resolve, delay));
-    
+const sendMessage = async (chat_id, bot_token, data) => {
     try {
         const response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendMessage`, {
+            chat_id,
+            ...data
+        });
+        return { success: response.data.ok };
+    } catch (error) {
+        return { error: error.response.data.description || error.message };
+    }
+};
+
+const sendPhoto = async (chat_id, bot_token, data) => {
+    try {
+        const response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendPhoto`, {
             chat_id,
             ...data
         });
@@ -52,45 +64,55 @@ app.post('/send', async (req, res) => {
 
     let successCount = 0;
     let failureCount = 0;
-    const errors = []; // Для хранения ошибок
+    const errors = [];
 
     try {
-        const promises = chat_ids.map(async (chat_id, index) => {
-            // Подготовка общего объекта
-            const baseData = {
-                parse_mode,
-                disable_notification,
-                protect_content,
-                allow_paid_broadcast,
-                message_effect_id,
-                reply_markup,
-            };
+        // Разбиваем chat_ids на чанки
+        for (let i = 0; i < chat_ids.length; i += BATCH_SIZE) {
+            const batch = chat_ids.slice(i, i + BATCH_SIZE);
 
-            let result;
+            const promises = batch.map(async (chat_id) => {
+                const baseData = {
+                    parse_mode,
+                    disable_notification,
+                    protect_content,
+                    allow_paid_broadcast,
+                    message_effect_id,
+                    reply_markup,
+                };
 
-            // Если передано фото
-            if (photo) {
-                const photoData = { caption: text || '', photo, link_preview_options };
-                result = await sendMessageWithDelay(chat_id, bot_token, photoData, index * 1000); // 1000 миллисекунд = 1 секунда
-            } else if (text) {
-                const messageData = { text, message_thread_id };
-                result = await sendMessageWithDelay(chat_id, bot_token, messageData, index * 1000); // 1000 миллисекунд = 1 секунда
-            } else {
-                failureCount++;
-                errors.push({ chat_id, error: 'Не указаны ни текст сообщения, ни фото.' });
-                return;
+                let result;
+
+                // Если передано фото
+                if (photo) {
+                    const photoData = { caption: text || '', photo, link_preview_options };
+                    result = await sendPhoto(chat_id, bot_token, photoData);
+                } else if (text) {
+                    const messageData = { text, message_thread_id };
+                    result = await sendMessage(chat_id, bot_token, messageData);
+                } else {
+                    failureCount++;
+                    errors.push({ chat_id, error: 'Не указаны ни текст сообщения, ни фото.' });
+                    return;
+                }
+
+                // Обработка результата
+                if (result.success) {
+                    successCount++;
+                } else {
+                    failureCount++;
+                    errors.push({ chat_id, error: result.error });
+                }
+            });
+
+            // Ожидаем завершения всех промисов в текущем пакете
+            await Promise.all(promises);
+
+            // Задержка между пакетами отправленных запросов
+            if (i + BATCH_SIZE < chat_ids.length) {
+                await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
             }
-
-            // Обработка результата
-            if (result.success) {
-                successCount++;
-            } else {
-                failureCount++;
-                errors.push({ chat_id, error: result.error });
-            }
-        });
-
-        await Promise.all(promises);
+        }
 
         // Формируем и отправляем результат на клиент
         res.json({
