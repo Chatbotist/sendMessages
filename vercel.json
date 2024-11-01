@@ -5,7 +5,7 @@
       "src": "index.js",
       "use": "@vercel/node",
       "config": {
-        "maxDuration": 60 // Увеличиваем максимальную длительность до 60 секунд
+        "maxDuration": 60
       }
     }
   ],
