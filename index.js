@@ -12,6 +12,22 @@ app.use(bodyParser.json());
 // Отдаем статические файлы из папки public
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Функция для отправки сообщения с временной задержкой
+const sendMessageWithDelay = async (chat_id, bot_token, data, delay) => {
+    // Задержка
+    await new Promise(resolve => setTimeout(resolve, delay));
+    
+    try {
+        const response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendMessage`, {
+            chat_id,
+            ...data
+        });
+        return { success: response.data.ok };
+    } catch (error) {
+        return { error: error.response.data.description || error.message };
+    }
+};
+
 // Endpoint для отправки сообщений
 app.post('/send', async (req, res) => {
     const {
@@ -39,58 +55,41 @@ app.post('/send', async (req, res) => {
     const errors = []; // Для хранения ошибок
 
     try {
-        // Обработка каждого chat_id
-        const promises = chat_ids.map(async (chat_id) => {
-            let response;
+        const promises = chat_ids.map(async (chat_id, index) => {
+            // Подготовка общего объекта
+            const baseData = {
+                parse_mode,
+                disable_notification,
+                protect_content,
+                allow_paid_broadcast,
+                message_effect_id,
+                reply_markup,
+            };
 
-            try {
-                // Подготовка общего объекта для отправки
-                const baseData = {
-                    chat_id,
-                    parse_mode,
-                    disable_notification,
-                    protect_content,
-                    allow_paid_broadcast,
-                    message_effect_id,
-                    reply_markup,
-                };
+            let result;
 
-                // Если есть фото, используем метод sendPhoto
-                if (photo) {
-                    response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendPhoto`, {
-                        ...baseData,
-                        caption: text || '', // Используем text в качестве caption
-                        photo,
-                        link_preview_options // Добавление параметра link_preview_options, если передан
-                    });
-                } 
-                // Если текст есть (и фото нет), используем метод sendMessage
-                else if (text) {
-                    response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendMessage`, {
-                        ...baseData,
-                        text,
-                        message_thread_id // Добавляем message_thread_id к методу отправки
-                    });
-                } else {
-                    failureCount++;
-                    errors.push({ chat_id, error: 'Не указаны ни текст сообщения, ни фото.' });
-                    return;
-                }
-
-                if (response.data.ok) {
-                    successCount++;
-                } else {
-                    failureCount++;
-                    errors.push({ chat_id, error: response.data.description });
-                }
-            } catch (error) {
-                console.error(`Ошибка при отправке сообщения пользователю ${chat_id}:`, error.message);
+            // Если передано фото
+            if (photo) {
+                const photoData = { caption: text || '', photo, link_preview_options };
+                result = await sendMessageWithDelay(chat_id, bot_token, photoData, index * 1000); // 1000 миллисекунд = 1 секунда
+            } else if (text) {
+                const messageData = { text, message_thread_id };
+                result = await sendMessageWithDelay(chat_id, bot_token, messageData, index * 1000); // 1000 миллисекунд = 1 секунда
+            } else {
                 failureCount++;
-                errors.push({ chat_id, error: error.message });
+                errors.push({ chat_id, error: 'Не указаны ни текст сообщения, ни фото.' });
+                return;
+            }
+
+            // Обработка результата
+            if (result.success) {
+                successCount++;
+            } else {
+                failureCount++;
+                errors.push({ chat_id, error: result.error });
             }
         });
 
-        // Ожидаем завершения всех промисов
         await Promise.all(promises);
 
         // Формируем и отправляем результат на клиент
