@@ -19,7 +19,7 @@
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            width: 300px;
+            width: 400px; /* Увеличиваем ширину формы */
             text-align: center;
         }
         .form-control {
@@ -54,16 +54,48 @@
             <input type="text" id="botToken" required>
         </div>
         <div class="form-control">
-            <label for="telegramIds">Telegram IDs (через запятую):</label>
-            <input type="text" id="telegramIds" required pattern="[0-9,]*" title="Только цифры и символ запятой">
+            <label for="chatIds">Chat IDs (через запятую):</label>
+            <input type="text" id="chatIds" required pattern="[0-9,]*" title="Только цифры и символ запятой">
         </div>
         <div class="form-control">
-            <label for="photoUrl">URL фото:</label>
-            <input type="url" id="photoUrl" pattern="https?://.+" title="Введите корректный URL, начинающийся с http:// или https://">
+            <label for="messageThreadId">Message Thread ID:</label>
+            <input type="text" id="messageThreadId">
         </div>
         <div class="form-control">
             <label for="text">Текст сообщения:</label>
             <textarea id="text"></textarea>
+        </div>
+        <div class="form-control">
+            <label for="photo">URL фото:</label>
+            <input type="url" id="photo">
+        </div>
+        <div class="form-control">
+            <label for="caption">Подпись к фото:</label>
+            <textarea id="caption"></textarea>
+        </div>
+        <div class="form-control">
+            <label for="parseMode">Parse Mode:</label>
+            <input type="text" id="parseMode" placeholder="html или markdown">
+        </div>
+        <div class="form-control">
+            <label for="disableNotification">Отключить уведомление:</label>
+            <input type="checkbox" id="disableNotification">
+        </div>
+        <div class="form-control">
+            <label for="protectContent">Защитить контент:</label>
+            <input type="checkbox" id="protectContent">
+        </div>
+        <div class="form-control">
+            <label for="allowPaidBroadcast">Разрешить платные трансляции:</label>
+            <input type="checkbox" id="allowPaidBroadcast">
+        </div>
+        <div class="form-control">
+            <label for="messageEffectId">Message Effect ID:</label>
+            <input type="text" id="messageEffectId">
+        </div>
+        <div class="form-control">
+            <label for="replyMarkup">Reply Markup (JSON):</label>
+            <textarea id="replyMarkup"></textarea>
         </div>
         <button type="submit">Отправить сообщение</button>
     </form>
@@ -73,15 +105,31 @@
             event.preventDefault();
 
             const botToken = document.getElementById('botToken').value;
-            const telegramIds = document.getElementById('telegramIds').value.split(',').map(id => id.trim());
+            const chatIds = document.getElementById('chatIds').value.split(',').map(id => id.trim());
+            const messageThreadId = document.getElementById('messageThreadId').value.trim();
             const text = document.getElementById('text').value.trim();
-            const photoUrl = document.getElementById('photoUrl').value.trim();
+            const photo = document.getElementById('photo').value.trim();
+            const caption = document.getElementById('caption').value.trim();
+            const parseMode = document.getElementById('parseMode').value.trim();
+            const disableNotification = document.getElementById('disableNotification').checked;
+            const protectContent = document.getElementById('protectContent').checked;
+            const allowPaidBroadcast = document.getElementById('allowPaidBroadcast').checked;
+            const messageEffectId = document.getElementById('messageEffectId').value.trim();
+            const replyMarkup = document.getElementById('replyMarkup').value.trim() || null;
 
             const payload = {
                 bot_token: botToken,
-                telegram_ids: telegramIds,
+                chat_ids: chatIds,
+                message_thread_id: messageThreadId || null,
                 text: text || null,
-                photo_url: photoUrl || null
+                caption: caption || null,
+                photo: photo || null,
+                parse_mode: parseMode || null,
+                disable_notification: disableNotification || null,
+                protect_content: protectContent || null,
+                allow_paid_broadcast: allowPaidBroadcast || null,
+                message_effect_id: messageEffectId || null,
+                reply_markup: replyMarkup ? JSON.parse(replyMarkup) : null // Преобразуем строку JSON в объект
             };
 
             try {
@@ -98,7 +146,7 @@
 
                 if (data.errors > 0) {
                     data.errorDetails.forEach(errorDetail => {
-                        console.error(`Не удалось отправить сообщение пользователю ${errorDetail.id}: ${errorDetail.error}`);
+                        console.error(`Не удалось отправить сообщение пользователю ${errorDetail.chat_id}: ${errorDetail.error}`);
                     });
                     alert(`Ошибки: ${data.errors}. Проверьте консоль для подробностей.`);
                 } else {
