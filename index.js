@@ -4,7 +4,7 @@ const axios = require('axios');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000; // Порт сервера
 
 // Middleware для парсинга JSON
 app.use(bodyParser.json());
@@ -12,35 +12,36 @@ app.use(bodyParser.json());
 // Отдаем статические файлы из папки public
 app.use(express.static(path.join(__dirname, 'public')));
 
-const BATCH_SIZE = 10; // Размер пакета для отправки сообщений
-const DELAY_BETWEEN_BATCHES = 2000; // Задержка между пакетами
+const BATCH_SIZE = 10; // Количество сообщений для отправки в одном пакете
+const DELAY_BETWEEN_BATCHES = 2000; // Задержка между пакетами в миллисекундах
 
-// Функция для отправки сообщения с временной задержкой
+// Функция для отправки сообщения
 const sendMessage = async (chat_id, bot_token, data) => {
     try {
         const response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendMessage`, {
             chat_id,
-            ...data
+            ...data,
         });
         return { success: response.data.ok };
     } catch (error) {
-        return { error: error.response.data.description || error.message };
+        return { error: error.response ? error.response.data.description : error.message };
     }
 };
 
+// Функция для отправки фото
 const sendPhoto = async (chat_id, bot_token, data) => {
     try {
         const response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendPhoto`, {
             chat_id,
-            ...data
+            ...data,
         });
         return { success: response.data.ok };
     } catch (error) {
-        return { error: error.response.data.description || error.message };
+        return { error: error.response ? error.response.data.description : error.message };
     }
 };
 
-// Endpoint для отправки сообщений
+// Эндпоинт для отправки сообщений
 app.post('/send', async (req, res) => {
     const {
         bot_token,
@@ -54,7 +55,7 @@ app.post('/send', async (req, res) => {
         protect_content,
         allow_paid_broadcast,
         message_effect_id,
-        reply_markup
+        reply_markup,
     } = req.body;
 
     // Проверяем обязательные параметры
@@ -67,10 +68,9 @@ app.post('/send', async (req, res) => {
     const errors = [];
 
     try {
-        // Разбиваем chat_ids на чанки
+        // Обрабатываем сообщения пакетами
         for (let i = 0; i < chat_ids.length; i += BATCH_SIZE) {
             const batch = chat_ids.slice(i, i + BATCH_SIZE);
-
             const promises = batch.map(async (chat_id) => {
                 const baseData = {
                     parse_mode,
@@ -108,7 +108,7 @@ app.post('/send', async (req, res) => {
             // Ожидаем завершения всех промисов в текущем пакете
             await Promise.all(promises);
 
-            // Задержка между пакетами отправленных запросов
+            // Задержка перед следующей отправкой
             if (i + BATCH_SIZE < chat_ids.length) {
                 await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
             }
@@ -119,7 +119,7 @@ app.post('/send', async (req, res) => {
             users: chat_ids.length,
             success: successCount,
             errors: failureCount,
-            errorDetails: errors
+            errorDetails: errors,
         });
     } catch (error) {
         console.error('Ошибка при обработке запроса:', error.message);
