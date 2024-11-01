@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Bot API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        form {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 300px;
+            text-align: center;
+        }
+        .form-control {
+            margin: 15px 0; /* Отступ между полями ввода */
+        }
+        input, textarea {
+            width: calc(100% - 22px); /* Учитываем отступы в ширине полей ввода */
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box; /* Учитываем отступы при расчете ширины */
+        }
+        button {
+            background: #5cb85c;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #4cae4c;
+        }
+    </style>
+</head>
+<body>
+    <form id="sendMessageForm">
+        <h1>Отправить сообщение в Telegram</h1>
+        <div class="form-control">
+            <label for="botToken">Токен бота Telegram:</label>
+            <input type="text" id="botToken" required>
+        </div>
+        <div class="form-control">
+            <label for="telegramIds">Telegram IDs (через запятую):</label>
+            <input type="text" id="telegramIds" required pattern="[0-9,]*" title="Только цифры и символ запятой">
+        </div>
+        <div class="form-control">
+            <label for="photoUrl">URL фото:</label>
+            <input type="url" id="photoUrl" pattern="https?://.+" title="Введите корректный URL, начинающийся с http:// или https://">
+        </div>
+        <div class="form-control">
+            <label for="text">Текст сообщения:</label>
+            <textarea id="text"></textarea>
+        </div>
+        <button type="submit">Отправить сообщение</button>
+    </form>
+
+    <script>
+        document.getElementById('sendMessageForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const botToken = document.getElementById('botToken').value;
+            const telegramIds = document.getElementById('telegramIds').value.split(',').map(id => id.trim());
+            const text = document.getElementById('text').value.trim();
+            const photoUrl = document.getElementById('photoUrl').value.trim();
+
+            const payload = {
+                bot_token: botToken,
+                telegram_ids: telegramIds,
+                text: text || null,
+                photo_url: photoUrl || null
+            };
+
+            try {
+                const response = await fetch('/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                console.log(data); // Логируем ответ
+
+                if (data.errors > 0) {
+                    data.errorDetails.forEach(errorDetail => {
+                        console.error(`Не удалось отправить сообщение пользователю ${errorDetail.id}: ${errorDetail.error}`);
+                    });
+                    alert(`Ошибки: ${data.errors}. Проверьте консоль для подробностей.`);
+                } else {
+                    alert(`Сообщения отправлены: ${data.success}`);
+                }
+            } catch (error) {
+                console.error('Ошибка при отправке:', error);
+                alert('Ошибка при отправке сообщения.');
+            }
+        });
+    </script>
+</body>
+</html>
