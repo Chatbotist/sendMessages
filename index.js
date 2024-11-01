@@ -65,7 +65,7 @@ app.post('/send', async (req, res) => {
 
     let successCount = 0;
     let failureCount = 0;
-    const errors = [];
+    const failedChatIds = []; // Массив для неудачных chat_id
 
     try {
         // Обрабатываем сообщения пакетами
@@ -92,16 +92,15 @@ app.post('/send', async (req, res) => {
                     result = await sendMessage(chat_id, bot_token, messageData);
                 } else {
                     failureCount++;
-                    errors.push({ chat_id, error: 'Не указаны ни текст сообщения, ни фото.' });
+                    failedChatIds.push(chat_id); // Добавляем к неудачным, если нет текста или фото
                     return;
                 }
-
                 // Обработка результата
                 if (result.success) {
                     successCount++;
                 } else {
                     failureCount++;
-                    errors.push({ chat_id, error: result.error });
+                    failedChatIds.push(chat_id); // Добавляем к неудачным при ошибке
                 }
             });
 
@@ -116,10 +115,10 @@ app.post('/send', async (req, res) => {
 
         // Формируем и отправляем результат на клиент
         res.json({
-            users: chat_ids.length,
+            total: chat_ids.length,
             success: successCount,
-            errors: failureCount,
-            errorDetails: errors,
+            failed: failureCount,
+            failedChatIds: failedChatIds, // Возвращаем список неудачных chat_ids
         });
     } catch (error) {
         console.error('Ошибка при обработке запроса:', error.message);
