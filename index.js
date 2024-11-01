@@ -19,7 +19,6 @@ app.post('/send', async (req, res) => {
         chat_ids,
         message_thread_id,
         text,
-        caption,
         photo,
         parse_mode,
         link_preview_options,
@@ -40,40 +39,42 @@ app.post('/send', async (req, res) => {
     const errors = []; // Для хранения ошибок
 
     try {
-        for (const chat_id of chat_ids) {
+        // Обработка каждого chat_id
+        const promises = chat_ids.map(async (chat_id) => {
+            let response;
+
             try {
-                let response;
+                // Подготовка общего объекта для отправки
+                const baseData = {
+                    chat_id,
+                    parse_mode,
+                    disable_notification,
+                    protect_content,
+                    allow_paid_broadcast,
+                    message_effect_id,
+                    reply_markup,
+                };
 
                 // Если есть фото, используем метод sendPhoto
                 if (photo) {
                     response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendPhoto`, {
-                        chat_id,
+                        ...baseData,
+                        caption: text || '', // Используем text в качестве caption
                         photo,
-                        caption: caption || '', // Используем caption (текст для фото)
-                        parse_mode,
-                        disable_notification,
-                        protect_content,
-                        allow_paid_broadcast,
-                        message_effect_id,
-                        reply_markup,
+                        link_preview_options // Добавление параметра link_preview_options, если передан
                     });
                 } 
-                // Если есть текст, используем метод sendMessage
+                // Если текст есть (и фото нет), используем метод sendMessage
                 else if (text) {
                     response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendMessage`, {
-                        chat_id,
+                        ...baseData,
                         text,
-                        parse_mode,
-                        disable_notification,
-                        protect_content,
-                        allow_paid_broadcast,
-                        message_effect_id,
-                        reply_markup,
-                        message_thread_id //message_thread_id для сообщения в конфиденциальном чате
+                        message_thread_id // Добавляем message_thread_id к методу отправки
                     });
                 } else {
                     failureCount++;
                     errors.push({ chat_id, error: 'Не указаны ни текст сообщения, ни фото.' });
+                    return;
                 }
 
                 if (response.data.ok) {
@@ -87,7 +88,10 @@ app.post('/send', async (req, res) => {
                 failureCount++;
                 errors.push({ chat_id, error: error.message });
             }
-        }
+        });
+
+        // Ожидаем завершения всех промисов
+        await Promise.all(promises);
 
         // Формируем и отправляем результат на клиент
         res.json({
