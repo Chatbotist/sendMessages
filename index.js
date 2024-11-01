@@ -4,7 +4,7 @@ const axios = require('axios');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000; // Порт сервера
+const PORT = process.env.PORT || 3000;
 
 // Middleware для парсинга JSON
 app.use(bodyParser.json());
@@ -13,35 +13,35 @@ app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const BATCH_SIZE = 10; // Количество сообщений для отправки в одном пакете
-const DELAY_BETWEEN_BATCHES = 2000; // Задержка между пакетами в миллисекундах
+const DELAY_BETWEEN_BATCHES = 2000; // Задержка между пакетами
 
-// Функция для отправки сообщения
 const sendMessage = async (chat_id, bot_token, data) => {
     try {
         const response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendMessage`, {
             chat_id,
             ...data,
         });
-        return { success: response.data.ok };
+        return response.data.ok;
     } catch (error) {
-        return { error: error.response ? error.response.data.description : error.message };
+        console.error(`Ошибка отправки сообщения для ${chat_id}: ${error.message}`);
+        return false;
     }
 };
 
-// Функция для отправки фото
 const sendPhoto = async (chat_id, bot_token, data) => {
     try {
         const response = await axios.post(`https://api.telegram.org/bot${bot_token}/sendPhoto`, {
             chat_id,
             ...data,
         });
-        return { success: response.data.ok };
+        return response.data.ok;
     } catch (error) {
-        return { error: error.response ? error.response.data.description : error.message };
+        console.error(`Ошибка отправки фото для ${chat_id}: ${error.message}`);
+        return false;
     }
 };
 
-// Эндпоинт для отправки сообщений
+// Главный эндпоинт для отправки сообщений
 app.post('/send', async (req, res) => {
     const {
         bot_token,
@@ -63,52 +63,50 @@ app.post('/send', async (req, res) => {
         return res.status(400).json({ error: 'Бот токен и список chat_ids обязательны.' });
     }
 
-    let successCount = 0;
-    let failureCount = 0;
-    const failedChatIds = []; // Массив для неудачных chat_id
+    const failedChatIds = []; // Список неудачных chat_id
+
+    const sendBatchMessages = async (batch) => {
+        const promises = batch.map(async (chat_id) => {
+            const baseData = {
+                parse_mode,
+                disable_notification,
+                protect_content,
+                allow_paid_broadcast,
+                message_effect_id,
+                reply_markup,
+            };
+
+            let result;
+
+            // Если передано фото
+            if (photo) {
+                const photoData = { caption: text || '', photo, link_preview_options };
+                result = await sendPhoto(chat_id, bot_token, photoData);
+            } else if (text) {
+                const messageData = { text, message_thread_id };
+                result = await sendMessage(chat_id, bot_token, messageData);
+            } else {
+                failedChatIds.push(chat_id);
+                return;
+            }
+
+            if (!result) {
+                failedChatIds.push(chat_id); // Добавляем к неудачным, если отправка не удалась
+            }
+        });
+
+        await Promise.all(promises);
+    };
 
     try {
-        // Обрабатываем сообщения пакетами
+        // Разбиваем chat_ids на чанки и отправляем сообщения
         for (let i = 0; i < chat_ids.length; i += BATCH_SIZE) {
             const batch = chat_ids.slice(i, i + BATCH_SIZE);
-            const promises = batch.map(async (chat_id) => {
-                const baseData = {
-                    parse_mode,
-                    disable_notification,
-                    protect_content,
-                    allow_paid_broadcast,
-                    message_effect_id,
-                    reply_markup,
-                };
-
-                let result;
-
-                // Если передано фото
-                if (photo) {
-                    const photoData = { caption: text || '', photo, link_preview_options };
-                    result = await sendPhoto(chat_id, bot_token, photoData);
-                } else if (text) {
-                    const messageData = { text, message_thread_id };
-                    result = await sendMessage(chat_id, bot_token, messageData);
-                } else {
-                    failureCount++;
-                    failedChatIds.push(chat_id); // Добавляем к неудачным, если нет текста или фото
-                    return;
-                }
-                // Обработка результата
-                if (result.success) {
-                    successCount++;
-                } else {
-                    failureCount++;
-                    failedChatIds.push(chat_id); // Добавляем к неудачным при ошибке
-                }
-            });
-
-            // Ожидаем завершения всех промисов в текущем пакете
-            await Promise.all(promises);
+            await sendBatchMessages(batch);
 
             // Задержка перед следующей отправкой
             if (i + BATCH_SIZE < chat_ids.length) {
+                // Проверка на таймаут
                 await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
             }
         }
@@ -116,8 +114,6 @@ app.post('/send', async (req, res) => {
         // Формируем и отправляем результат на клиент
         res.json({
             total: chat_ids.length,
-            success: successCount,
-            failed: failureCount,
             failedChatIds: failedChatIds, // Возвращаем список неудачных chat_ids
         });
     } catch (error) {
