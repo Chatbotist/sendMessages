@@ -12,7 +12,7 @@ app.use(bodyParser.json());
 // Отдаем статические файлы из папки public
 app.use(express.static(path.join(__dirname, 'public'))); 
 
-const BATCH_SIZE = 10; // Количество сообщений для отправки в одном пакете 
+const BATCH_SIZE = 5; // Уменьшите количество сообщений для отправки в одном пакете 
 const DELAY_BETWEEN_BATCHES = 2000; // Задержка между пакетами
 
 // Функция для отправки сообщения
@@ -93,13 +93,13 @@ app.post('/send', async (req, res) => {
                 const messageData = { text, message_thread_id }; 
                 result = await sendMessage(chat_id, bot_token, messageData); 
             } else { 
-                failedChatIds.push(chat_id); 
+                failedChatIds.push(chat_id);
                 return; 
             } 
 
             // Обработка результата
             if (!result) { 
-                failedChatIds.push(chat_id); // Добавляем к неудачным, если отправка не удалась 
+                failedChatIds.push(chat_id); 
             } 
         }); 
 
@@ -109,10 +109,11 @@ app.post('/send', async (req, res) => {
     try { 
         // Разбиваем chat_ids на чанки и отправляем сообщения
         for (let i = 0; i < chat_ids.length; i += BATCH_SIZE) { 
-            const batch = chat_ids.slice(i, i + BATCH_SIZE);
+            const batch = chat_ids.slice(i, i + BATCH_SIZE); 
             await sendBatchMessages(batch); 
 
             // Задержка перед следующей отправкой
+            // Увеличиваем задержку, чтобы избежать таймаутов
             if (i + BATCH_SIZE < chat_ids.length) { 
                 await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES)); 
             } 
